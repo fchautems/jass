@@ -1,5 +1,6 @@
 """Moteur de règles pour le Jass suisse, variante Chibre romand."""
 
+from .bots import choose_first_legal_card, choose_first_trump, play_bot_turn
 from .engine import DealState, GameOptions, GameState, PlayerView
 from .model import Announcement, AnnouncementKind, Card, Rank, Suit, Team, TrumpChoice
 from .rules import (
@@ -16,6 +17,8 @@ from .rules import (
 __all__ = [
     "Announcement",
     "AnnouncementKind",
+    "choose_first_legal_card",
+    "choose_first_trump",
     "Card",
     "DealState",
     "GameOptions",
@@ -23,6 +26,7 @@ __all__ = [
     "JACK_OF_TRUMP_BONUS_NAME",
     "NELL_BONUS_NAME",
     "PlayerView",
+    "play_bot_turn",
     "Rank",
     "Suit",
     "Team",

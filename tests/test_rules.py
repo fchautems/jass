@@ -162,3 +162,31 @@ def test_player_view_hides_other_hands_and_old_tricks_except_last():
     assert view.hand == (c(Suit.CLUBS, Rank.SIX),)
     assert view.score == (10, 20)
     assert not hasattr(view, "all_completed_tricks")
+
+
+def test_naive_bot_can_choose_trump_and_play_a_legal_card():
+    from jass_chibre.bots import choose_first_legal_card, choose_first_trump
+
+    deal = GameState().start_deal(seed=4)
+    chooser = deal.chooser
+    choice = choose_first_trump(deal)
+    deal.choose_trump(chooser, choice)
+
+    player = deal.current_leader
+    card = choose_first_legal_card(deal, player)
+    assert card in deal.legal_cards_for(player)
+
+    deal.play_card(player, card)
+    assert card not in deal.hands[player]
+
+
+def test_web_page_renders_human_hand_and_new_deal_link():
+    from jass_chibre.webapp import WebSession, render_page
+
+    session = WebSession()
+    session.new_deal()
+    html = render_page(session)
+
+    assert "Jass Chibre romand" in html
+    assert "Nouvelle donne" in html
+    assert "Score partie" in html

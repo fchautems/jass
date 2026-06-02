@@ -45,6 +45,26 @@ cartes_legales = donne.legal_cards_for(joueur)
 donne.play_card(joueur, cartes_legales[0])
 ```
 
+## Interface web minimale
+
+Pour tester plus concrètement le moteur, une petite interface HTML sans dépendance externe est disponible. C'est le choix le plus simple à ce stade: pas de dépendance graphique Python à installer, ouverture dans un navigateur, et réutilisable plus tard pour une interface web plus propre. Elle lance une partie avec le joueur humain en position `0` et trois bots naïfs pour les joueurs `1`, `2` et `3`.
+
+```bash
+PYTHONPATH=src python -m jass_chibre.webapp
+```
+
+Ouvrir ensuite <http://127.0.0.1:8000>.
+
+Cette interface permet déjà de :
+
+- voir sa main ;
+- choisir l'atout ou chibrer quand le joueur humain est le choisisseur ;
+- cliquer uniquement sur les cartes légalement jouables ;
+- laisser les trois bots jouer automatiquement ;
+- voir le pli en cours, le dernier pli, le journal des coups et le score.
+
+Les bots sont volontairement simples : ils choisissent une couleur d'atout selon les points potentiels de leur main et jouent une carte légale déterministe. Ils servent à tester les règles, pas à bien jouer.
+
 ## Tests
 
 ```bash
