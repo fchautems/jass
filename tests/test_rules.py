@@ -192,3 +192,97 @@ def test_web_page_renders_human_hand_and_new_deal_link():
     assert "Total partie" in html
     assert "table-grid" in html
     assert "Dernier pli" in html
+
+
+def test_dealer_rotation_goes_counterclockwise_after_finished_deal():
+    game = GameState()
+    deal = DealState(hands={0: [], 1: [], 2: [], 3: []}, dealer_starter=0, finished=True)
+    deal.deal_points_by_team[Team.TEAM_0_2] = 80
+    deal.deal_points_by_team[Team.TEAM_1_3] = 77
+    game.current_deal = deal
+
+    game.finish_deal_if_done()
+
+    assert game.next_dealer_starter == 3
+    assert game.score_tuple() == (80, 77)
+
+
+def test_web_hand_is_visible_before_trump_choice():
+    from jass_chibre.webapp import WebSession, render_page
+
+    deal = DealState(
+        hands={
+            0: [c(Suit.CLUBS, Rank.SIX), c(Suit.DIAMONDS, Rank.ACE)],
+            1: [],
+            2: [],
+            3: [],
+        },
+        dealer_starter=0,
+        chooser=0,
+    )
+    html = render_page(WebSession(deal=deal))
+
+    assert "Votre main" in html
+    assert "6♣" in html
+    assert "A♦" in html
+    assert "Choisir l'atout" in html
+
+
+def test_web_bot_step_plays_only_one_card_at_a_time():
+    from jass_chibre.webapp import WebSession
+
+    deal = DealState(
+        hands={
+            0: [],
+            1: [c(Suit.CLUBS, Rank.SIX), c(Suit.SPADES, Rank.ACE)],
+            2: [],
+            3: [],
+        },
+        dealer_starter=1,
+        chooser=1,
+        trump=Suit.HEARTS,
+        current_leader=1,
+    )
+    session = WebSession(deal=deal)
+
+    session.step()
+
+    assert len(deal.current_trick) == 1
+    assert deal.current_trick[0][0] == 1
+    assert len(deal.hands[1]) == 1
+
+
+def test_completed_trick_stays_on_table_until_next_step():
+    from jass_chibre.webapp import WebSession, render_page
+
+    deal = DealState(
+        hands={
+            0: [],
+            1: [],
+            2: [],
+            3: [c(Suit.CLUBS, Rank.NINE)],
+        },
+        dealer_starter=0,
+        chooser=0,
+        trump=Suit.HEARTS,
+        current_leader=0,
+        current_trick=[
+            (0, c(Suit.CLUBS, Rank.SIX)),
+            (1, c(Suit.CLUBS, Rank.SEVEN)),
+            (2, c(Suit.CLUBS, Rank.EIGHT)),
+        ],
+    )
+    session = WebSession(deal=deal)
+
+    session.step()
+    html_while_paused = render_page(session)
+
+    assert session.table_trick is not None
+    assert "9♣" in html_while_paused
+    assert "Aucun pli terminé" in html_while_paused
+
+    session.step()
+    html_after_pause = render_page(session)
+
+    assert session.table_trick is None
+    assert "Gagnant: joueur 3" in html_after_pause

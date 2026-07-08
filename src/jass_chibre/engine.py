@@ -226,7 +226,7 @@ class GameState:
             return
         for team in Team:
             self.score[team] += self.current_deal.deal_points_by_team[team]
-        self.next_dealer_starter = (self.current_deal.dealer_starter + 1) % 4
+        self.next_dealer_starter = (self.current_deal.dealer_starter - 1) % 4
         self.current_deal = None
 
     def is_game_over(self) -> bool:

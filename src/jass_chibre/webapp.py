@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .bots import choose_first_trump, play_bot_turn
-from .engine import DealState, GameState
+from .engine import CompletedTrick, DealState, GameState
 from .model import Card, Rank, Suit, Team, TrumpChoice
 
 HUMAN_PLAYER = 0
@@ -42,13 +42,14 @@ class WebSession:
     deal: DealState | None = None
     messages: list[str] = field(default_factory=list)
     last_deal_summary: str | None = None
+    table_trick: CompletedTrick | None = None
 
     def new_deal(self) -> None:
         self.deal = self.game.start_deal()
         self.messages = [f"Nouvelle donne. Le joueur {self.deal.chooser} choisit l'atout."]
         self.last_deal_summary = None
+        self.table_trick = None
         self._auto_choose_trump_if_needed()
-        self._auto_play_bots_until_human()
 
     def choose_trump_for_human(self, suit: Suit | None, chibre: bool = False) -> None:
         if self.deal is None:
@@ -64,7 +65,6 @@ class WebSession:
             self.deal.choose_trump(HUMAN_PLAYER, TrumpChoice.direct(suit))
             self.messages.append(f"Vous choisissez {SUIT_LABELS[suit]} comme atout.")
         self._auto_choose_trump_if_needed()
-        self._auto_play_bots_until_human()
 
     def play_human_card(self, card: Card) -> None:
         if self.deal is None or self.deal.trump is None:
@@ -73,13 +73,14 @@ class WebSession:
         if _current_player(self.deal) != HUMAN_PLAYER:
             self.messages.append("Ce n'est pas encore à vous de jouer.")
             return
+        trick_count = len(self.deal.completed_tricks)
         try:
             self.deal.play_card(HUMAN_PLAYER, card)
             self.messages.append(f"Vous jouez {format_card_plain(card)}.")
         except ValueError as exc:
             self.messages.append(str(exc))
             return
-        self._auto_play_bots_until_human()
+        self._hold_new_completed_trick(trick_count)
 
     def _auto_choose_trump_if_needed(self) -> None:
         if self.deal is None:
@@ -91,17 +92,43 @@ class WebSession:
             self.deal.choose_trump(chooser, choice)
             self.messages.append(f"Bot {chooser} choisit {SUIT_LABELS[choice.suit]} comme atout.")
 
-    def _auto_play_bots_until_human(self) -> None:
-        if self.deal is None or self.deal.trump is None:
+    def step(self) -> None:
+        """Avance d'une seule étape visible: un bot, ou transfert du pli terminé."""
+        if self.deal is None:
+            self.new_deal()
             return
-        while not self.deal.finished and _current_player(self.deal) != HUMAN_PLAYER:
-            player, card = play_bot_turn(self.deal)
-            self.messages.append(f"Bot {player} joue {format_card_plain(card)}.")
-            if self.deal.completed_tricks and not self.deal.current_trick:
-                trick = self.deal.completed_tricks[-1]
-                self.messages.append(f"Joueur {trick.winner} gagne le pli ({trick.points} points).")
-        if self.deal.finished:
-            self._finish_deal_once()
+        if self.table_trick is not None:
+            self.table_trick = None
+            if self.deal.finished:
+                self._finish_deal_once()
+            return
+        self._auto_choose_trump_if_needed()
+        if self.deal.trump is None or self.deal.finished:
+            if self.deal.finished:
+                self._finish_deal_once()
+            return
+        if _current_player(self.deal) == HUMAN_PLAYER:
+            return
+        trick_count = len(self.deal.completed_tricks)
+        player, card = play_bot_turn(self.deal)
+        self.messages.append(f"Bot {player} joue {format_card_plain(card)}.")
+        self._hold_new_completed_trick(trick_count)
+
+    def should_auto_advance(self) -> bool:
+        if self.deal is None:
+            return False
+        if self.table_trick is not None:
+            return True
+        if self.deal.trump is None:
+            return self.deal.chooser != HUMAN_PLAYER
+        return not self.deal.finished and _current_player(self.deal) != HUMAN_PLAYER
+
+    def _hold_new_completed_trick(self, previous_count: int) -> None:
+        if self.deal is None or len(self.deal.completed_tricks) == previous_count:
+            return
+        self.table_trick = self.deal.completed_tricks[-1]
+        trick = self.table_trick
+        self.messages.append(f"Joueur {trick.winner} gagne le pli ({trick.points} points).")
 
     def _finish_deal_once(self) -> None:
         if self.deal is None or not self.deal.finished or self.last_deal_summary is not None:
@@ -131,6 +158,10 @@ class JassRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/play":
             self._handle_play(query)
+            return
+        if parsed.path == "/step":
+            SESSION.step()
+            self._redirect("/")
             return
         self._send_html(render_page(SESSION))
 
@@ -179,20 +210,20 @@ def render_page(session: WebSession) -> str:
     body = [
         '<header class="topbar"><h1>Jass Chibre romand</h1><a class="button secondary" href="/new">Nouvelle donne</a></header>',
         _scoreboard_html(session),
-        _table_layout_html(deal),
+        _table_layout_html(session),
     ]
     if deal.trump is None and deal.chooser == HUMAN_PLAYER:
         body.append(_trump_choice_html())
-    elif deal.finished:
+    elif deal.finished and session.table_trick is None:
         body.append('<div class="panel"><p>La donne est terminée. Lancez une nouvelle donne pour continuer.</p></div>')
-    elif _current_player(deal) == HUMAN_PLAYER:
-        body.append(_hand_html(deal))
-    else:
-        body.append('<div class="panel small-note">Les bots jouent automatiquement; rechargez si besoin.</div>')
-    return _layout("".join(body))
+    elif session.should_auto_advance():
+        body.append('<div class="panel small-note">Le jeu avance automatiquement pour montrer chaque carte jouée.</div>')
+    body.append(_hand_html(deal))
+    return _layout("".join(body), auto_advance=session.should_auto_advance())
 
 
-def _layout(content: str) -> str:
+def _layout(content: str, auto_advance: bool = False) -> str:
+    auto_script = '<script>setTimeout(() => { window.location.href = "/step"; }, 1200);</script>' if auto_advance else ""
     return f"""<!doctype html>
 <html lang="fr">
 <head>
@@ -242,7 +273,7 @@ h1 {{ margin: 0; }}
 </style>
 </head>
 <body>{content}</body>
-</html>"""
+{auto_script}</html>"""
 
 
 def _scoreboard_html(session: WebSession) -> str:
@@ -271,14 +302,16 @@ def _visible_deal_total(deal: DealState, team: Team) -> int:
     return deal.trick_points_by_team[team] + deal.ordinary_announcement_points_by_team[team] + deal.stoeck_points_by_team[team]
 
 
-def _table_layout_html(deal: DealState) -> str:
+def _table_layout_html(session: WebSession) -> str:
+    assert session.deal is not None
+    deal = session.deal
     return f"""<section class="table-grid panel" aria-label="Table de jeu">
 {_player_seat_html(deal, 2, 'partner', 'Partenaire')}
 {_player_seat_html(deal, 1, 'left', 'Adversaire 1')}
-<div class="table-center">{_current_trick_html(deal)}</div>
+<div class="table-center">{_current_trick_html(session)}</div>
 {_player_seat_html(deal, 3, 'right', 'Adversaire 3')}
 {_player_seat_html(deal, 0, 'you', 'Vous')}
-{_last_trick_html(deal)}
+{_last_trick_html(session)}
 </section>"""
 
 
@@ -289,8 +322,10 @@ def _player_seat_html(deal: DealState, player: int, css_class: str, label: str) 
     return f'<div class="player-seat {css_class}">{escape(label)}{marker}<div>{backs}</div><small>{count} cartes</small></div>'
 
 
-def _current_trick_html(deal: DealState) -> str:
-    plays = dict(deal.current_trick)
+def _current_trick_html(session: WebSession) -> str:
+    assert session.deal is not None
+    trick_on_table = session.table_trick
+    plays = dict(trick_on_table.plays if trick_on_table is not None else session.deal.current_trick)
     slots = []
     for player in (2, 1, 3, 0):
         card = plays.get(player)
@@ -299,11 +334,15 @@ def _current_trick_html(deal: DealState) -> str:
     return '<div class="current-trick">' + "".join(slots) + "</div>"
 
 
-def _last_trick_html(deal: DealState) -> str:
-    if not deal.completed_tricks:
+def _last_trick_html(session: WebSession) -> str:
+    assert session.deal is not None
+    visible_tricks = list(session.deal.completed_tricks)
+    if session.table_trick is not None and visible_tricks and visible_tricks[-1] == session.table_trick:
+        visible_tricks = visible_tricks[:-1]
+    if not visible_tricks:
         content = '<p><em>Aucun pli terminé.</em></p>'
     else:
-        trick = deal.completed_tricks[-1]
+        trick = visible_tricks[-1]
         cards = "".join(f'<span>J{player} {format_card(card)}</span>' for player, card in trick.plays)
         content = f'<div class="last-trick-cards">{cards}</div><p>Gagnant: joueur {trick.winner} · {trick.points} points</p>'
     return f'<aside class="last-trick panel"><h2>Dernier pli</h2>{content}</aside>'
@@ -317,7 +356,7 @@ def _trump_choice_html() -> str:
 
 
 def _hand_html(deal: DealState) -> str:
-    legal = set(deal.legal_cards_for(HUMAN_PLAYER))
+    legal = set(deal.legal_cards_for(HUMAN_PLAYER)) if deal.trump is not None and _current_player(deal) == HUMAN_PLAYER else set()
     cards = []
     for card in deal.hands[HUMAN_PLAYER]:
         css = "card legal" if card in legal else "card disabled"

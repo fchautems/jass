@@ -9,7 +9,7 @@ Le moteur implémente :
 - 4 joueurs et 2 équipes fixes : `0 + 2` contre `1 + 3` ;
 - paquet de 36 cartes, distribution de 9 cartes par joueur ;
 - premier donneur/choisisseur déterminé par le détenteur du `7 de carreau` ;
-- rotation du donneur/choisisseur au joueur suivant après une donne terminée ;
+- rotation du donneur/choisisseur en sens inverse des aiguilles d'une montre après une donne terminée ;
 - choix direct de l'atout ou `chibre` vers le partenaire, sans re-chibre ;
 - force et points des cartes à l'atout et hors-atout ;
 - validation des plis, obligation de fournir, coupe, défausse et sous-coupe interdite ;
@@ -57,12 +57,12 @@ Ouvrir ensuite <http://127.0.0.1:8000>.
 
 Cette interface permet déjà de :
 
-- voir sa main ;
+- voir sa main dès le départ ;
 - choisir l'atout ou chibrer quand le joueur humain est le choisisseur ;
 - cliquer uniquement sur les cartes légalement jouables ;
-- laisser les trois bots jouer automatiquement ;
+- laisser les trois bots jouer automatiquement, carte par carte, avec une courte pause entre les actions ;
 - voir une table simplifiée en carré avec les positions des joueurs ;
-- voir le pli en cours, le dernier pli sous forme de cartes, les points de la donne et le total de la partie.
+- voir le pli en cours rester sur le plateau quelques secondes après la 4e carte, puis passer dans le dernier pli sous forme de cartes, avec les points de la donne et le total de la partie.
 
 Les bots sont volontairement simples : ils choisissent une couleur d'atout selon les points potentiels de leur main et jouent une carte légale déterministe. Ils servent à tester les règles, pas à bien jouer.
 
