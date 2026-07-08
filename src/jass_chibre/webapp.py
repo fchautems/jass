@@ -169,28 +169,26 @@ class JassRequestHandler(BaseHTTPRequestHandler):
 
 def render_page(session: WebSession) -> str:
     deal = session.deal
-    score = session.game.score_tuple()
-    body = [
-        "<h1>Jass Chibre romand</h1>",
-        '<p><a class="button secondary" href="/new">Nouvelle donne</a></p>',
-        f"<p><strong>Score partie:</strong> équipe 0/2 {score[0]} — équipe 1/3 {score[1]}</p>",
-    ]
     if deal is None:
-        body.append("<p>Aucune donne.</p>")
-        return _layout("".join(body))
+        content = """
+        <header class="topbar"><h1>Jass Chibre romand</h1><a class="button secondary" href="/new">Nouvelle donne</a></header>
+        <div class="panel"><p>Aucune donne.</p></div>
+        """
+        return _layout(content)
 
-    body.append(_status_html(deal))
-    body.append(_messages_html(session.messages[-12:]))
+    body = [
+        '<header class="topbar"><h1>Jass Chibre romand</h1><a class="button secondary" href="/new">Nouvelle donne</a></header>',
+        _scoreboard_html(session),
+        _table_layout_html(deal),
+    ]
     if deal.trump is None and deal.chooser == HUMAN_PLAYER:
         body.append(_trump_choice_html())
     elif deal.finished:
-        body.append("<p>La donne est terminée. Lancez une nouvelle donne pour continuer.</p>")
+        body.append('<div class="panel"><p>La donne est terminée. Lancez une nouvelle donne pour continuer.</p></div>')
+    elif _current_player(deal) == HUMAN_PLAYER:
+        body.append(_hand_html(deal))
     else:
-        body.append(_table_html(deal))
-        if _current_player(deal) == HUMAN_PLAYER:
-            body.append(_hand_html(deal))
-        else:
-            body.append("<p>Les bots jouent automatiquement; rechargez si besoin.</p>")
+        body.append('<div class="panel small-note">Les bots jouent automatiquement; rechargez si besoin.</div>')
     return _layout("".join(body))
 
 
@@ -201,35 +199,114 @@ def _layout(content: str) -> str:
 <meta charset="utf-8">
 <title>Jass Chibre romand</title>
 <style>
-body {{ font-family: system-ui, sans-serif; max-width: 960px; margin: 24px auto; background: #f7f4ee; color: #1f2933; }}
-.panel {{ background: white; border: 1px solid #ddd4c8; border-radius: 12px; padding: 16px; margin: 14px 0; box-shadow: 0 1px 2px #0001; }}
-.card, .button {{ display: inline-block; border: 1px solid #8d7b68; border-radius: 10px; padding: 10px 12px; margin: 5px; background: #fff; text-decoration: none; color: #1f2933; }}
-.card.legal {{ border-width: 2px; border-color: #157347; }}
+:root {{ --felt: #247344; --felt-dark: #185632; --wood: #ead2aa; --ink: #1f2933; }}
+body {{ font-family: system-ui, sans-serif; max-width: 1180px; margin: 20px auto; background: var(--wood); color: var(--ink); }}
+.topbar {{ display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }}
+h1 {{ margin: 0; }}
+.panel {{ background: #fffaf0; border: 1px solid #d3bd96; border-radius: 14px; padding: 16px; margin: 14px 0; box-shadow: 0 2px 4px #0002; }}
+.scoreboard {{ display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 10px; }}
+.scorebox {{ background: #263238; color: white; border-radius: 10px; padding: 12px; }}
+.scorebox strong {{ display: block; font-size: 0.85rem; opacity: .8; margin-bottom: 4px; }}
+.table-grid {{ display: grid; grid-template-columns: 170px 1fr 170px; grid-template-rows: 130px minmax(250px, auto) auto auto; gap: 12px; align-items: center; }}
+.player-seat {{ text-align: center; font-weight: 700; }}
+.player-seat.partner {{ grid-column: 2; grid-row: 1; }}
+.player-seat.left {{ grid-column: 1; grid-row: 2; writing-mode: vertical-rl; justify-self: center; }}
+.player-seat.right {{ grid-column: 3; grid-row: 2; writing-mode: vertical-rl; justify-self: center; }}
+.player-seat.you {{ grid-column: 2; grid-row: 3; }}
+.table-center {{ grid-column: 2; grid-row: 2; background: radial-gradient(circle at center, #2d8a51, var(--felt)); border: 6px solid var(--felt-dark); border-radius: 34px; min-height: 250px; padding: 18px; box-shadow: inset 0 0 18px #0004; }}
+.current-trick {{ display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: auto auto auto; min-height: 220px; align-items: center; justify-items: center; }}
+.play-slot {{ min-width: 86px; min-height: 118px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: white; font-weight: 700; text-shadow: 0 1px 1px #0008; }}
+.play-slot.p0 {{ grid-column: 2; grid-row: 3; }}
+.play-slot.p1 {{ grid-column: 1; grid-row: 2; }}
+.play-slot.p2 {{ grid-column: 2; grid-row: 1; }}
+.play-slot.p3 {{ grid-column: 3; grid-row: 2; }}
+.last-trick {{ grid-column: 1 / 4; grid-row: 4; align-self: stretch; }}
+.last-trick-cards {{ display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }}
+.card, .button {{ display: inline-flex; align-items: center; justify-content: center; border: 1px solid #8d7b68; border-radius: 10px; padding: 10px 12px; margin: 5px; background: #fff; text-decoration: none; color: #1f2933; min-width: 44px; min-height: 62px; font-size: 1.25rem; font-weight: 800; box-shadow: 0 2px 3px #0002; }}
+.card.small {{ min-width: 34px; min-height: 48px; font-size: 1rem; padding: 7px 9px; margin: 2px; }}
+.card.back {{ color: #f8fafc; background: repeating-linear-gradient(45deg, #194a8d 0 5px, #f8fafc 5px 7px, #b42318 7px 10px); border-color: white; }}
+.card.empty {{ background: #ffffff22; border: 1px dashed #ffffff99; box-shadow: none; color: #fff; font-size: .85rem; }}
+.card.legal {{ border-width: 3px; border-color: #16a34a; transform: translateY(-4px); }}
 .card.disabled {{ opacity: .45; }}
+.hand {{ display: flex; flex-wrap: wrap; justify-content: center; }}
 .red {{ color: #b42318; }}
 .black {{ color: #111827; }}
-.button {{ background: #244c8f; color: white; }}
+.button {{ background: #244c8f; color: white; min-height: auto; font-size: 1rem; }}
 .button.secondary {{ background: #6b7280; }}
-ul {{ padding-left: 20px; }}
+.small-note {{ color: #46515f; }}
+@media (max-width: 760px) {{
+  .scoreboard {{ grid-template-columns: 1fr 1fr; }}
+  .table-grid {{ grid-template-columns: 1fr; grid-template-rows: auto; }}
+  .player-seat, .player-seat.partner, .player-seat.left, .player-seat.right, .player-seat.you, .table-center, .last-trick {{ grid-column: 1; grid-row: auto; writing-mode: horizontal-tb; }}
+}}
 </style>
 </head>
 <body>{content}</body>
 </html>"""
 
 
-def _status_html(deal: DealState) -> str:
-    trump = "pas encore choisi" if deal.trump is None else f"{SUIT_SYMBOLS[deal.trump]} {SUIT_LABELS[deal.trump]}"
-    current = "choix de l'atout" if deal.trump is None else f"joueur {_current_player(deal)}"
-    return f"""<div class="panel">
-<p><strong>Atout:</strong> {trump}</p>
-<p><strong>À jouer:</strong> {current}</p>
-<p><strong>Points plis de la donne:</strong> équipe 0/2 {deal.trick_points_by_team[Team.TEAM_0_2]} — équipe 1/3 {deal.trick_points_by_team[Team.TEAM_1_3]}</p>
-</div>"""
+def _scoreboard_html(session: WebSession) -> str:
+    deal = session.deal
+    game_score = session.game.score_tuple()
+    if deal is None:
+        deal_02 = deal_13 = 0
+        trump = "—"
+        current = "—"
+    else:
+        deal_02 = _visible_deal_total(deal, Team.TEAM_0_2)
+        deal_13 = _visible_deal_total(deal, Team.TEAM_1_3)
+        trump = "pas choisi" if deal.trump is None else f"{SUIT_SYMBOLS[deal.trump]} {SUIT_LABELS[deal.trump]}"
+        current = "choix atout" if deal.trump is None else f"joueur {_current_player(deal)}"
+    return f"""<section class="scoreboard panel">
+<div class="scorebox"><strong>Total partie</strong>Vous {game_score[0]} · Eux {game_score[1]}</div>
+<div class="scorebox"><strong>Points donne</strong>Vous {deal_02} · Eux {deal_13}</div>
+<div class="scorebox"><strong>Atout</strong>{trump}</div>
+<div class="scorebox"><strong>À jouer</strong>{current}</div>
+</section>"""
 
 
-def _messages_html(messages: list[str]) -> str:
-    items = "".join(f"<li>{escape(message)}</li>" for message in messages)
-    return f'<div class="panel"><h2>Journal</h2><ul>{items}</ul></div>'
+def _visible_deal_total(deal: DealState, team: Team) -> int:
+    if deal.finished:
+        return deal.deal_points_by_team[team]
+    return deal.trick_points_by_team[team] + deal.ordinary_announcement_points_by_team[team] + deal.stoeck_points_by_team[team]
+
+
+def _table_layout_html(deal: DealState) -> str:
+    return f"""<section class="table-grid panel" aria-label="Table de jeu">
+{_player_seat_html(deal, 2, 'partner', 'Partenaire')}
+{_player_seat_html(deal, 1, 'left', 'Adversaire 1')}
+<div class="table-center">{_current_trick_html(deal)}</div>
+{_player_seat_html(deal, 3, 'right', 'Adversaire 3')}
+{_player_seat_html(deal, 0, 'you', 'Vous')}
+{_last_trick_html(deal)}
+</section>"""
+
+
+def _player_seat_html(deal: DealState, player: int, css_class: str, label: str) -> str:
+    count = len(deal.hands[player])
+    marker = " ♦" if player == HUMAN_PLAYER else ""
+    backs = "".join('<span class="card small back" aria-hidden="true"></span>' for _ in range(min(count, 9)))
+    return f'<div class="player-seat {css_class}">{escape(label)}{marker}<div>{backs}</div><small>{count} cartes</small></div>'
+
+
+def _current_trick_html(deal: DealState) -> str:
+    plays = dict(deal.current_trick)
+    slots = []
+    for player in (2, 1, 3, 0):
+        card = plays.get(player)
+        card_html = format_card(card) if card is not None else '<span class="card empty">—</span>'
+        slots.append(f'<div class="play-slot p{player}"><span>J{player}</span>{card_html}</div>')
+    return '<div class="current-trick">' + "".join(slots) + "</div>"
+
+
+def _last_trick_html(deal: DealState) -> str:
+    if not deal.completed_tricks:
+        content = '<p><em>Aucun pli terminé.</em></p>'
+    else:
+        trick = deal.completed_tricks[-1]
+        cards = "".join(f'<span>J{player} {format_card(card)}</span>' for player, card in trick.plays)
+        content = f'<div class="last-trick-cards">{cards}</div><p>Gagnant: joueur {trick.winner} · {trick.points} points</p>'
+    return f'<aside class="last-trick panel"><h2>Dernier pli</h2>{content}</aside>'
 
 
 def _trump_choice_html() -> str:
@@ -239,32 +316,25 @@ def _trump_choice_html() -> str:
     return f'<div class="panel"><h2>Choisir l\'atout</h2>{buttons}<a class="button secondary" href="/choose?chibre=1">Chibrer</a></div>'
 
 
-def _table_html(deal: DealState) -> str:
-    current = "".join(f"<span class='card'>{player}: {format_card(card)}</span>" for player, card in deal.current_trick)
-    if not current:
-        current = "<em>Aucune carte dans le pli en cours.</em>"
-    last = "<em>Aucun pli terminé.</em>"
-    if deal.completed_tricks:
-        trick = deal.completed_tricks[-1]
-        cards = " ".join(f"{player}: {format_card(card)}" for player, card in trick.plays)
-        last = f"{cards}<br>Gagnant: joueur {trick.winner}, {trick.points} points"
-    return f'<div class="panel"><h2>Pli en cours</h2>{current}<h2>Dernier pli</h2><p>{last}</p></div>'
-
-
 def _hand_html(deal: DealState) -> str:
     legal = set(deal.legal_cards_for(HUMAN_PLAYER))
     cards = []
     for card in deal.hands[HUMAN_PLAYER]:
         css = "card legal" if card in legal else "card disabled"
-        label = format_card(card)
+        label = format_card_label(card)
         if card in legal:
             cards.append(f'<a class="{css}" href="/play?card={card.suit.name}|{card.rank.name}">{label}</a>')
         else:
             cards.append(f'<span class="{css}">{label}</span>')
-    return '<div class="panel"><h2>Votre main</h2><p>Les cartes avec bord vert sont jouables.</p>' + "".join(cards) + "</div>"
+    return '<div class="panel"><h2>Votre main</h2><p>Les cartes avec bord vert sont jouables.</p><div class="hand">' + "".join(cards) + "</div></div>"
 
 
 def format_card(card: Card) -> str:
+    color = "red" if card.suit in (Suit.HEARTS, Suit.DIAMONDS) else "black"
+    return f"<span class='card {color}'>{RANK_LABELS[card.rank]}{SUIT_SYMBOLS[card.suit]}</span>"
+
+
+def format_card_label(card: Card) -> str:
     color = "red" if card.suit in (Suit.HEARTS, Suit.DIAMONDS) else "black"
     return f"<span class='{color}'>{RANK_LABELS[card.rank]}{SUIT_SYMBOLS[card.suit]}</span>"
 

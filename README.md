@@ -61,7 +61,8 @@ Cette interface permet déjà de :
 - choisir l'atout ou chibrer quand le joueur humain est le choisisseur ;
 - cliquer uniquement sur les cartes légalement jouables ;
 - laisser les trois bots jouer automatiquement ;
-- voir le pli en cours, le dernier pli, le journal des coups et le score.
+- voir une table simplifiée en carré avec les positions des joueurs ;
+- voir le pli en cours, le dernier pli sous forme de cartes, les points de la donne et le total de la partie.
 
 Les bots sont volontairement simples : ils choisissent une couleur d'atout selon les points potentiels de leur main et jouent une carte légale déterministe. Ils servent à tester les règles, pas à bien jouer.
 

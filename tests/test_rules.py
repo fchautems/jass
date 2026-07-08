@@ -189,4 +189,6 @@ def test_web_page_renders_human_hand_and_new_deal_link():
 
     assert "Jass Chibre romand" in html
     assert "Nouvelle donne" in html
-    assert "Score partie" in html
+    assert "Total partie" in html
+    assert "table-grid" in html
+    assert "Dernier pli" in html
